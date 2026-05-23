@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 
 	"github.com/foru17/neko-master/apps/agent/internal/domain"
 )
@@ -226,8 +227,11 @@ func (c *Client) getClashPolicyState(ctx context.Context) (*domain.PolicyStateSn
 		providerProxies[p.Type] = append(providerProxies[p.Type], proxy)
 	}
 
-	// Create providers by type
+	// Create providers by type. Sort the proxy slice for stable JSON
+	// marshalling so the runner's md5 dedup actually catches no-op syncs —
+	// upstream proxiesData is a map (random iteration order) without this.
 	for typ, proxies := range providerProxies {
+		sort.Slice(proxies, func(i, j int) bool { return proxies[i].Name < proxies[j].Name })
 		snap.Providers[typ] = domain.GatewayProvider{
 			Name:    typ,
 			Type:    typ,

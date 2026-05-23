@@ -158,12 +158,22 @@ func (r *Runner) releaseLock() {
 	}
 }
 
-// isProcessRunning checks if a process with given PID is running
+// isProcessRunning checks whether the PID is alive AND belongs to a
+// neko-agent process. On Linux we cross-check /proc/<pid>/comm so that a
+// stale PID later reused by an unrelated process cannot permanently block
+// agent startup. On non-Linux (or if /proc isn't available) we fall back to
+// the signal-0 liveness check.
 func isProcessRunning(pid int) bool {
-	// On Unix, use syscall.Kill with signal 0 to check if process exists
-	// Signal 0 performs error checking without actually sending a signal
-	err := syscall.Kill(pid, 0)
-	return err == nil
+	if err := syscall.Kill(pid, 0); err != nil {
+		return false
+	}
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+	if err != nil {
+		// /proc not readable (non-Linux, restricted hidepid, etc.) — treat
+		// liveness check as authoritative.
+		return true
+	}
+	return strings.Contains(strings.TrimSpace(string(data)), "neko-agent")
 }
 
 func (r *Runner) Run(ctx context.Context) {
@@ -190,8 +200,21 @@ func (r *Runner) Run(ctx context.Context) {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := r.flushOnce(shutdownCtx); err != nil {
-		log.Printf("[agent:%s] final flush failed: %v", r.cfg.AgentID, err)
+	// Drain the queue in batches until empty or the deadline hits — flushOnce
+	// only sends one ReportBatchSize chunk per call, so a single invocation
+	// would silently drop anything beyond it.
+	for {
+		if err := r.flushOnce(shutdownCtx); err != nil {
+			log.Printf("[agent:%s] final flush failed: %v", r.cfg.AgentID, err)
+			break
+		}
+		pending, _ := r.queueStats()
+		if pending == 0 {
+			break
+		}
+		if shutdownCtx.Err() != nil {
+			break
+		}
 	}
 
 	wg.Wait()
