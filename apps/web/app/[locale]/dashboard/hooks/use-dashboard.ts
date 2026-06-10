@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
 import { useTheme } from "next-themes";
 import {
   keepPreviousData,
@@ -100,11 +100,9 @@ export function useDashboard(): UseDashboardReturn {
   const { theme, setTheme } = useTheme();
   const queryClient = useQueryClient();
 
-  // Get locale from pathname (e.g., /en/dashboard -> en)
-  const locale = useMemo(() => {
-    const match = pathname.match(/^\/([^/]+)/);
-    return match ? match[1] : "en";
-  }, [pathname]);
+  // Locale from next-intl context — robust against route structure changes,
+  // unlike parsing the pathname.
+  const locale = useLocale();
 
   // UI State
   const [activeTab, setActiveTab] = useState<TabId>("overview");

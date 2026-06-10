@@ -5,6 +5,37 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## [1.3.8] - 2026-06-10
+
+### 修复
+
+- **Gateway 采集器流量计数器重置后丢失流量** 🐛
+  - 修复后端重启或连接 ID 复用导致计数器回退时，`Math.max(0, delta)` 静默丢弃流量、且高水位未重置导致重置后的流量持续被吞掉的问题；现在与 Surge 采集器一致，将当前值计为新流量并记录日志
+  - 修复长连接空闲超过 5 分钟被误判为 stale 清理后，重新加入时按累计值整体重复计数的问题：连接只要出现在推送中即刷新 `lastSeen` 与计数水位
+- **优雅停机可能丢失待写入数据** 🐛
+  - `APIServer.stop()` 未 `await app.close()`，且 `shutdown()` 同步执行后立即 `process.exit(0)`，导致 `onClose` 钩子中的 Agent 缓冲区 flush 来不及完成；现已全链路 await
+- **WebSocket 死连接泄漏**：广播发送失败且 socket 已关闭时，从客户端表中移除，避免无效广播持续累积
+- **内存边界**：实时统计 store 新增按 source IP 的外层设备明细表淘汰（上限 10,000）；WebSocket 摘要缓存新增 1,000 条硬上限；Agent 请求去重表改为基于时间的定期清理
+- **Web 前端**
+  - 登录确认 `setTimeout` 在组件卸载时未清理
+  - Dashboard 通过正则解析路径获取 locale，改用 `next-intl` 的 `useLocale()`
+  - 流量图表硬编码 `en-US` 时间格式、统计卡片 `toLocaleString()` 未传 locale，切换语言后格式不一致
+- **共享包**：`parseGatewayRule` 对对象输入增加运行时校验，避免返回 `proxy: undefined` 违反类型契约
+- **Go Agent**：`syncConfig` 读取 `lastConfigHash` 未加锁（TOCTOU）；策略同步循环启动等待期间不响应 ctx 取消；锁文件权限收紧为 0600；`json.Marshal` 错误不再忽略
+- **install.sh**：`download_file` 无条件 `return 0` 掩盖下载失败；curl/wget 增加超时与重试（connect 10s / 总 120s / 重试 3 次）
+
+### 安全
+
+- **CORS 可配置**：新增 `CORS_ORIGIN` 环境变量（逗号分隔）限制跨域来源，默认保持宽松以兼容 LAN 部署
+- **API 安全响应头**：新增 `X-Content-Type-Options` / `X-Frame-Options` / `Referrer-Policy`
+- **令牌比较改为常数时间**：Agent token 与 Dashboard token 校验使用 `crypto.timingSafeEqual`
+- **后端 URL 协议校验**：仅允许 `http(s)` / `ws(s)` / `agent://`，拒绝 `file:` 等危险协议
+- **Cookie 密钥持久化**：未配置 `COOKIE_SECRET` 时自动生成并持久化到数据库，重启不再使所有会话失效
+
+### 变更
+
+- **依赖全面升级**：TypeScript 6.0、ESLint 10（collector）、better-sqlite3 12、recharts 3、react-day-picker 10、lucide-react 1.x、tailwind-merge 3、dotenv 17、Next.js 16.2.7 等全部升至最新；Web 端 ESLint 因 `eslint-plugin-react` 生态尚未支持 v10 暂留 v9
+
 ## [1.3.7] - 2026-04-12
 
 ### 修复

@@ -243,6 +243,7 @@ export class RealtimeStore {
   private static readonly MAX_IP_ENTRIES = 50_000;
   private static readonly MAX_RULE_CHAIN_ENTRIES = 50_000;
   private static readonly MAX_DEVICE_DETAIL_ENTRIES = 10_000;
+  private static readonly MAX_DEVICE_SOURCES = 10_000;
 
   private db: StatsDatabase | null = null;
 
@@ -1492,6 +1493,7 @@ export class RealtimeStore {
     // Device detail maps (per source IP × domain/IP) can be deeply nested
     const deviceDomainMap = this.deviceDomainByBackend.get(backendId);
     if (deviceDomainMap) {
+      this.evictOuterDeviceMapIfNeeded(deviceDomainMap);
       for (const [, subMap] of deviceDomainMap) {
         this.evictIfNeeded(subMap, RealtimeStore.MAX_DEVICE_DETAIL_ENTRIES);
       }
@@ -1499,9 +1501,35 @@ export class RealtimeStore {
 
     const deviceIPMap = this.deviceIPByBackend.get(backendId);
     if (deviceIPMap) {
+      this.evictOuterDeviceMapIfNeeded(deviceIPMap);
       for (const [, subMap] of deviceIPMap) {
         this.evictIfNeeded(subMap, RealtimeStore.MAX_DEVICE_DETAIL_ENTRIES);
       }
+    }
+  }
+
+  /**
+   * Bound the number of tracked source IPs in a device detail map. Without
+   * this, the outer map grows by one nested map per source IP indefinitely.
+   * Evicts the bottom ~25% of source IPs by aggregate traffic.
+   */
+  private evictOuterDeviceMapIfNeeded<T extends { totalUpload: number; totalDownload: number }>(
+    outer: Map<string, Map<string, T>>,
+  ): void {
+    if (outer.size <= RealtimeStore.MAX_DEVICE_SOURCES) return;
+
+    const totals = Array.from(outer.entries()).map(([sourceIP, subMap]) => {
+      let traffic = 0;
+      for (const entry of subMap.values()) {
+        traffic += entry.totalUpload + entry.totalDownload;
+      }
+      return { sourceIP, traffic };
+    });
+    totals.sort((a, b) => a.traffic - b.traffic);
+
+    const removeCount = Math.ceil(totals.length * 0.25);
+    for (let i = 0; i < removeCount; i++) {
+      outer.delete(totals[i].sourceIP);
     }
   }
 }

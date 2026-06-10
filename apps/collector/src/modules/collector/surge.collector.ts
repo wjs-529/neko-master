@@ -579,8 +579,8 @@ export function createSurgeCollector(
           }
         } else {
           // Existing connection - calculate delta
-          let uploadDelta = 0;
-          let downloadDelta = 0;
+          let uploadDelta: number;
+          let downloadDelta: number;
 
           // Detect counter reset (connection restart/reuse)
           if (currentUpload < existing.lastUpload || currentDownload < existing.lastDownload) {

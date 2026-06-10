@@ -287,6 +287,7 @@ export function createCollector(
         data.connections.map((c) => c?.id).filter(Boolean),
       );
       let hasNewTraffic = false;
+      let counterResets = 0;
       const geoBatchByIp = new Map<
         string,
         { upload: number; download: number; connections: number }
@@ -383,11 +384,28 @@ export function createCollector(
           }
         } else {
           // Existing connection - calculate delta and add to batch
-          const uploadDelta = Math.max(0, conn.upload - existing.lastUpload);
-          const downloadDelta = Math.max(
-            0,
-            conn.download - existing.lastDownload,
-          );
+          let uploadDelta: number;
+          let downloadDelta: number;
+          if (
+            conn.upload < existing.lastUpload ||
+            conn.download < existing.lastDownload
+          ) {
+            // Counter reset (backend restart / connection id reuse) - treat
+            // current value as new traffic instead of silently dropping it.
+            uploadDelta = conn.upload;
+            downloadDelta = conn.download;
+            existing.counted = false;
+            counterResets++;
+          } else {
+            uploadDelta = conn.upload - existing.lastUpload;
+            downloadDelta = conn.download - existing.lastDownload;
+          }
+
+          // Refresh tracking state even when idle so open connections are not
+          // evicted as stale and later re-counted from their cumulative totals.
+          existing.lastUpload = conn.upload;
+          existing.lastDownload = conn.download;
+          existing.lastSeen = now;
 
           if (uploadDelta > 0 || downloadDelta > 0) {
             const connections = existing.counted ? 0 : 1;
@@ -441,12 +459,15 @@ export function createCollector(
               geoBatchByIp.set(existing.ip, existingGeo);
             }
 
-            existing.lastUpload = conn.upload;
-            existing.lastDownload = conn.download;
-            existing.lastSeen = now;
             hasNewTraffic = true;
           }
         }
+      }
+
+      if (counterResets > 0) {
+        console.info(
+          `[Collector:${id}] Detected ${counterResets} traffic counter reset(s); counted current totals as new traffic`,
+        );
       }
 
       // Find closed connections and remove them

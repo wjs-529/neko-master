@@ -98,9 +98,11 @@ export function parseGatewayRule(rule: unknown): { payload?: string; proxy: stri
       proxy: parsed.policy,
     };
   } else if (typeof rule === 'object' && rule !== null) {
-    const r = rule as Record<string, string>;
+    const r = rule as Record<string, unknown>;
+    // Validate at runtime so the non-optional `proxy` return type holds.
+    if (typeof r.proxy !== 'string' || !r.proxy) return null;
     return {
-      payload: r.payload,
+      payload: typeof r.payload === 'string' ? r.payload : undefined,
       proxy: r.proxy,
     };
   }

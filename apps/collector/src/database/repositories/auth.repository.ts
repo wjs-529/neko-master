@@ -40,4 +40,23 @@ export class AuthRepository extends BaseRepository {
       `).run(updates.tokenHash || '');
     }
   }
+
+  /**
+   * Cookie-signing secret persisted across restarts. Generated on first use
+   * when COOKIE_SECRET is not provided via the environment.
+   */
+  getOrCreateCookieSecret(generate: () => string): string {
+    const row = this.db.prepare(`SELECT value FROM auth_config WHERE key = 'cookie_secret'`).get() as
+      | { value: string }
+      | undefined;
+    if (row?.value) {
+      return row.value;
+    }
+    const secret = generate();
+    this.db.prepare(`
+      INSERT INTO auth_config (key, value) VALUES ('cookie_secret', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+    `).run(secret);
+    return secret;
+  }
 }

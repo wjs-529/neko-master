@@ -15,6 +15,14 @@ async function hashToken(token: string): Promise<string> {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+async function timingSafeHashEqual(a: string, b: string): Promise<boolean> {
+  const crypto = await import('crypto');
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 export class AuthService {
   private db: StatsDatabase;
 
@@ -74,8 +82,8 @@ export class AuthService {
     }
 
     const tokenHash = await hashToken(token);
-    
-    if (tokenHash === config.tokenHash) {
+
+    if (await timingSafeHashEqual(tokenHash, config.tokenHash)) {
       return { valid: true };
     }
 

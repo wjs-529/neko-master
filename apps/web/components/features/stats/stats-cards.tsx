@@ -2,7 +2,7 @@
 
 import { useRef, useEffect } from "react";
 import { Download, Upload, Globe, Activity, Server, Route } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
 import { animate, motion, useTransform, useMotionValue } from "framer-motion";
 import { formatBytes, cn } from "@/lib/utils";
 import type { StatsSummary } from "@neko-master/shared";
@@ -111,6 +111,8 @@ function AnimatedStatCard({
 
 export function StatsCards({ data, backendStatus, isLoading }: StatsCardsProps) {
   const t = useTranslations("stats");
+  const locale = useLocale();
+  const formatCount = (n: number) => n.toLocaleString(locale);
   const summaryIsZero =
     !data ||
     ((data.totalDownload || 0) === 0 &&
@@ -209,21 +211,21 @@ export function StatsCards({ data, backendStatus, isLoading }: StatsCardsProps) 
           />
           <AnimatedStatCard
             value={data?.totalConnections || 0}
-            formatter={(n) => n.toLocaleString()}
+            formatter={formatCount}
             label={t("totalConnections")}
             icon={Activity}
             color="#10B981"
           />
           <AnimatedStatCard
             value={data?.totalDomains || 0}
-            formatter={(n) => n.toLocaleString()}
+            formatter={formatCount}
             label={t("domains")}
             icon={Globe}
             color="#06B6D4"
           />
           <AnimatedStatCard
             value={data?.totalRules || 0}
-            formatter={(n) => n.toLocaleString()}
+            formatter={formatCount}
             label={t("rules")}
             icon={Route}
             color="#F59E0B"

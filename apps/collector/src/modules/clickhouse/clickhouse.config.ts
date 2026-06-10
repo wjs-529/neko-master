@@ -102,7 +102,7 @@ export async function ensureClickHouseReady(config: ClickHouseConfig): Promise<v
       const message = error instanceof Error ? error.message : String(error);
       if (attempt >= config.maxRetries) {
         if (config.required) {
-          throw new Error(`[ClickHouse] Not ready after ${attempt} attempts: ${message}`);
+          throw new Error(`[ClickHouse] Not ready after ${attempt} attempts: ${message}`, { cause: error });
         }
         console.warn(`[ClickHouse] Not ready after ${attempt} attempts, continue with fallback: ${message}`);
         return;

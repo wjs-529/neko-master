@@ -204,8 +204,8 @@ export class ConfigRepository extends BaseRepository {
     deletedConnections: number; deletedLogs: number; deletedDomains: number;
     deletedIPs: number; deletedProxies: number; deletedRules: number;
   } {
-    let deletedConnections = 0;
-    let deletedLogs = 0;
+    let deletedConnections: number;
+    let deletedLogs: number;
     let deletedDomains = 0;
     let deletedIPs = 0;
     let deletedProxies = 0;

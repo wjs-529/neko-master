@@ -225,14 +225,17 @@ export async function createApp(options: AppOptions) {
     agentIsFlushing.clear();
   };
   const REQUEST_ID_TTL_MS = 5 * 60 * 1000;
+  let lastRequestIdPruneAt = 0;
   function isDuplicateRequestId(id: string): boolean {
     const now = Date.now();
     if (seenRequestIds.has(id)) {
       return true;
     }
     seenRequestIds.set(id, now);
-    // Prune expired entries periodically (every ~500 inserts is fine; map is small)
-    if (seenRequestIds.size % 500 === 0) {
+    // Time-based prune: the previous size-modulo check could skip pruning for
+    // long stretches under steady growth, letting the map balloon.
+    if (now - lastRequestIdPruneAt > 60_000) {
+      lastRequestIdPruneAt = now;
       const cutoff = now - REQUEST_ID_TTL_MS;
       for (const [k, ts] of seenRequestIds) {
         if (ts < cutoff) seenRequestIds.delete(k);
@@ -241,23 +244,26 @@ export async function createApp(options: AppOptions) {
     return false;
   }
 
-  // Register CORS
+  // Register CORS — CORS_ORIGIN restricts allowed origins (comma-separated);
+  // defaults to permissive for LAN deployments where the dashboard origin is not known.
+  const corsOrigins = (process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   await app.register(cors, {
-    origin: true,
+    origin: corsOrigins.length > 0 ? corsOrigins : true,
     credentials: true,
   });
 
-  // Register Cookie — auto-generate a random secret if not configured
-  let cookieSecret = process.env.COOKIE_SECRET;
-  if (!cookieSecret) {
-    cookieSecret = crypto.randomBytes(32).toString('hex');
-    if (process.env.NODE_ENV === 'production') {
-      console.warn(
-        '[Security] COOKIE_SECRET is not set. A random secret has been generated for this session. ' +
-        'Sessions will be invalidated on restart. Set COOKIE_SECRET in your .env for persistence.',
-      );
-    }
-  }
+  app.addHook('onSend', async (_request, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  });
+
+  // Register Cookie — fall back to a secret persisted in the database so sessions
+  // survive restarts even when COOKIE_SECRET is not configured.
+  const cookieSecret = process.env.COOKIE_SECRET || db.getOrCreateCookieSecret();
   await app.register(cookie, {
     secret: cookieSecret,
     parseOptions: {},
@@ -335,6 +341,13 @@ export async function createApp(options: AppOptions) {
       // Best-effort enrichment only; ignore provider endpoint failures.
     }
     return map;
+  };
+
+  const timingSafeStringEqual = (a: string, b: string): boolean => {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
   };
 
   const parseAgentToken = (request: { headers: Record<string, unknown> }): string => {
@@ -506,7 +519,7 @@ export async function createApp(options: AppOptions) {
     }
 
     const provided = parseAgentToken(request);
-    if (!provided || provided !== expected) {
+    if (!provided || !timingSafeStringEqual(provided, expected)) {
       reply.status(401).send({ error: 'Invalid agent token' });
       return false;
     }
@@ -1356,9 +1369,10 @@ export class APIServer {
     return this.app;
   }
 
-  stop() {
+  async stop() {
     if (this.app) {
-      this.app.close();
+      // Awaiting close runs the onClose hook, which flushes pending agent buffers.
+      await this.app.close();
       console.log('[API] Server stopped');
     }
   }

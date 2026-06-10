@@ -11,7 +11,7 @@ import {
   CartesianGrid,
   ReferenceArea,
 } from "recharts";
-import type { TooltipProps } from "recharts";
+import type { TooltipContentProps } from "recharts";
 import { Activity, Clock, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
@@ -322,7 +322,7 @@ export function BackendHealthChart({
 
   // ── Tooltip ────────────────────────────────────────────────────────────────
   const CustomTooltip = React.useCallback(
-    ({ active, payload }: TooltipProps<number, string>) => {
+    ({ active, payload }: TooltipContentProps) => {
       if (!active || !payload?.length) return null;
       const slot = payload[0].payload as Slot;
 
@@ -555,7 +555,7 @@ export function BackendHealthChart({
               width={hasLatency ? 44 : 0}
               domain={hasLatency ? [0, latencyDomainMax ?? "auto"] : [0, 1.2]}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={CustomTooltip} />
 
             {/* Primary curve: latency when available, otherwise online fallback */}
             <Area

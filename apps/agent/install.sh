@@ -58,13 +58,15 @@ detect_existing_install() {
 download_file() {
 	url="$1"
 	output="$2"
+	# Propagate the downloader's exit status (a plain `return 0` would mask
+	# failures when callers invoke this inside a condition under `set -e`).
 	if command -v curl >/dev/null 2>&1; then
-		curl -fsSL "$url" -o "$output"
-		return 0
+		curl -fsSL --connect-timeout 10 --max-time 120 --retry 3 --retry-delay 2 "$url" -o "$output"
+		return $?
 	fi
 	if command -v wget >/dev/null 2>&1; then
-		wget -qO "$output" "$url"
-		return 0
+		wget -qO "$output" --timeout=120 --tries=3 "$url"
+		return $?
 	fi
 	echo "[neko-agent] error: curl or wget is required" >&2
 	exit 1

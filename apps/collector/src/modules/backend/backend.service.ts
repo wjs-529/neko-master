@@ -289,10 +289,31 @@ export class BackendService {
   }
 
   /**
+   * Validate a backend URL: agent:// for agent mode, otherwise http(s)/ws(s) only.
+   * Rejects schemes like file:, javascript: or unparseable URLs outright.
+   */
+  private validateBackendUrl(url: string): void {
+    if (isAgentBackendUrl(url)) {
+      return;
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error('Invalid backend URL');
+    }
+    const allowed = ['http:', 'https:', 'ws:', 'wss:'];
+    if (!allowed.includes(parsed.protocol)) {
+      throw new Error(`Unsupported backend URL scheme '${parsed.protocol}'. Allowed: http, https, ws, wss, agent`);
+    }
+  }
+
+  /**
    * Create a new backend
    */
   createBackend(input: CreateBackendInput): CreateBackendResult {
     const { name, url, token, type = 'clash' } = input;
+    this.validateBackendUrl(url);
     const isAgentMode = isAgentBackendUrl(url);
     const normalizedToken = (token || '').trim();
     const finalToken = isAgentMode
@@ -330,6 +351,9 @@ export class BackendService {
 
     const prevAgentMode = isAgentBackendUrl(existing.url);
     const nextUrl = typeof input.url === 'string' ? input.url : existing.url;
+    if (typeof input.url === 'string') {
+      this.validateBackendUrl(input.url);
+    }
     const nextAgentMode = isAgentBackendUrl(nextUrl);
 
     this.db.updateBackend(id, input);
@@ -476,6 +500,7 @@ export class BackendService {
       if (config.required || process.env.CH_STRICT_STATS === '1') {
         throw new Error(
           `[BackendService] Failed to clear ClickHouse stats for backend ${backendId}: ${message}`,
+          { cause: error },
         );
       }
       console.warn(

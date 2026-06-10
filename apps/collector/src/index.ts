@@ -6,11 +6,11 @@ import { isAgentBackendUrl } from '@neko-master/shared';
 // Load .env.local if it exists (takes precedence over .env, but not shell)
 const envLocalPath = path.join(process.cwd(), '.env.local');
 if (fs.existsSync(envLocalPath)) {
-  config({ path: envLocalPath });
+  config({ path: envLocalPath, quiet: true });
 }
 
 // Load .env (defaults)
-config();
+config({ quiet: true });
 
 import { StatsDatabase, BackendConfig } from './modules/db/db.js';
 import { createCollector, GatewayCollector } from './modules/collector/gateway.collector.js';
@@ -139,8 +139,8 @@ async function main() {
   cleanupService.start();
 
   // Handle graceful shutdown
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', () => { void shutdown(); });
+  process.on('SIGTERM', () => { void shutdown(); });
 }
 
 // Manage backend connections based on database configuration
@@ -279,7 +279,7 @@ function stopCollector(backendId: number) {
 }
 
 // Graceful shutdown
-function shutdown() {
+async function shutdown() {
   console.log('[Main] Shutting down...');
 
   // Stop all collectors and policy sync
@@ -294,9 +294,14 @@ function shutdown() {
   }
   collectors.clear();
 
-  // Stop servers
+  // Stop servers — await the API server so its onClose hook can flush
+  // pending agent buffers before the database is closed.
   wsServer?.stop();
-  apiServer?.stop();
+  try {
+    await apiServer?.stop();
+  } catch (err) {
+    console.error('[Main] Error stopping API server:', err);
+  }
   clickHouseCompareService?.stop();
   geoService?.destroy();
 

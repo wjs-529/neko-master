@@ -129,7 +129,7 @@ func (r *Runner) acquireLock() error {
 	}
 
 	// Create lock file with exclusive flag (O_EXCL)
-	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0644)
+	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
 	if err != nil {
 		if os.IsExist(err) {
 			return fmt.Errorf("lock file already exists for backend %d", r.cfg.BackendID)
@@ -346,9 +346,15 @@ func (r *Runner) syncConfig(ctx context.Context) error {
 	}
 
 	// Calculate a simple hash to avoid sending if unmodified
-	data, _ := json.Marshal(snap)
+	data, err := json.Marshal(snap)
+	if err != nil {
+		return fmt.Errorf("marshal config snapshot: %w", err)
+	}
 	hash := fmt.Sprintf("%x", md5.Sum(data))
-	if hash == r.lastConfigHash {
+	r.mu.Lock()
+	unchanged := hash == r.lastConfigHash
+	r.mu.Unlock()
+	if unchanged {
 		return nil
 	}
 	snap.Hash = hash
@@ -375,8 +381,12 @@ func (r *Runner) syncConfig(ctx context.Context) error {
 func (r *Runner) runPolicyStateSyncLoop(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	// Wait a bit for initial config sync to complete
-	time.Sleep(5 * time.Second)
+	// Wait a bit for initial config sync to complete, but stay responsive to shutdown
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(5 * time.Second):
+	}
 
 	// Initial sync
 	if err := r.syncPolicyState(ctx); err != nil {

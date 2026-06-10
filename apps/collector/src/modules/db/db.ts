@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { randomBytes } from 'crypto';
 import { normalizeGeoIP, type Connection, type DomainStats, type IPStats, type HourlyStats, type ProxyStats, type RuleStats, type ProxyTrafficStats, type DeviceStats } from '@neko-master/shared';
 import { getAllSchemaStatements } from '../../database/schema.js';
 import {
@@ -1099,6 +1100,7 @@ export class StatsDatabase {
   // Auth
   getAuthConfig() { return this.repos.auth.getAuthConfig(); }
   updateAuthConfig(updates: { enabled?: boolean; tokenHash?: string | null }) { this.repos.auth.updateAuthConfig(updates); }
+  getOrCreateCookieSecret() { return this.repos.auth.getOrCreateCookieSecret(() => randomBytes(32).toString('hex')); }
 
   // Surge
   getSurgePolicyCache(backendId: number) { return this.repos.surge.getSurgePolicyCache(backendId); }

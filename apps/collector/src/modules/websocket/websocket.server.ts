@@ -1064,6 +1064,17 @@ export class StatsWebSocketServer {
               this.baseSummaryCache.delete(key);
             }
           }
+          // Hard size cap: many distinct subscription combos can outpace the
+          // TTL sweep; drop the oldest entries beyond the cap.
+          const MAX_BASE_SUMMARY_ENTRIES = 1000;
+          if (this.baseSummaryCache.size > MAX_BASE_SUMMARY_ENTRIES) {
+            const sorted = Array.from(this.baseSummaryCache.entries())
+              .sort((a, b) => a[1].ts - b[1].ts);
+            const excess = this.baseSummaryCache.size - MAX_BASE_SUMMARY_ENTRIES;
+            for (let i = 0; i < excess; i++) {
+              this.baseSummaryCache.delete(sorted[i][0]);
+            }
+          }
         }
       }
     }
@@ -1291,6 +1302,11 @@ export class StatsWebSocketServer {
         sentCount++;
       } catch (err) {
         console.error('[WebSocket] Error sending to client:', err);
+        // Drop clients whose socket is no longer usable so they don't
+        // accumulate and get re-broadcast forever if 'close' never fires.
+        if (ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED) {
+          this.clients.delete(ws);
+        }
       }
     }
 

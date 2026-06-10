@@ -1220,7 +1220,7 @@ ORDER BY rule, chain
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (this.source === 'clickhouse' || this.strictStats) {
-        throw new Error(`[ClickHouse Reader] strict mode query failed: ${message}`);
+        throw new Error(`[ClickHouse Reader] strict mode query failed: ${message}`, { cause: error });
       }
       console.warn(`[ClickHouse Reader] query failed, fallback to sqlite: ${message}`);
       return null;

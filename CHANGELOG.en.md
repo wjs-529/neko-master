@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.8] - 2026-06-10
+
+### Fixed
+
+- **Gateway collector lost traffic after counter resets** 🐛
+  - When a backend restarted or a connection ID was reused, `Math.max(0, delta)` silently discarded the traffic, and because the high-water mark was never reset, all subsequent traffic kept being swallowed until counters exceeded the old values. Now matches the Surge collector: resets are detected, current totals are counted as new traffic, and resets are logged
+  - Fixed long-lived idle connections being evicted as stale after 5 minutes and then re-added as "new", double-counting their full cumulative totals — connections present in the feed now always refresh `lastSeen` and the counter watermark
+- **Graceful shutdown could lose buffered data** 🐛
+  - `APIServer.stop()` didn't `await app.close()`, and the synchronous `shutdown()` called `process.exit(0)` before the `onClose` hook could flush pending agent buffers; the whole chain is now awaited
+- **WebSocket dead-client leak**: clients whose socket is already closed are now removed from the client map when a broadcast send fails, instead of being re-broadcast forever
+- **Memory bounds**: realtime store now evicts the outer per-source-IP device detail maps (cap 10,000); WebSocket summary cache has a hard 1,000-entry cap; agent request-ID dedup map is pruned on a timer instead of a size-modulo check
+- **Web frontend**
+  - Login-confirm `setTimeout` was never cleared on unmount
+  - Dashboard derived the locale by regex-parsing the pathname; now uses `useLocale()` from next-intl
+  - Traffic chart hardcoded `en-US` time formatting and stat cards called `toLocaleString()` without a locale, producing inconsistent formats after switching languages
+- **Shared package**: `parseGatewayRule` now validates object inputs at runtime so it can no longer return `proxy: undefined` in violation of its type contract
+- **Go agent**: `syncConfig` read `lastConfigHash` without holding the mutex (TOCTOU); the policy sync loop's startup delay now responds to context cancellation; lock file permissions tightened to 0600; `json.Marshal` errors are no longer ignored
+- **install.sh**: `download_file` unconditionally returned 0, masking download failures; curl/wget now have timeouts and retries (connect 10s / total 120s / 3 retries)
+
+### Security
+
+- **Configurable CORS**: new `CORS_ORIGIN` env var (comma-separated) restricts allowed origins; default stays permissive for LAN deployments
+- **API security headers**: added `X-Content-Type-Options` / `X-Frame-Options` / `Referrer-Policy`
+- **Constant-time token comparison**: agent token and dashboard token verification now use `crypto.timingSafeEqual`
+- **Backend URL scheme validation**: only `http(s)` / `ws(s)` / `agent://` are accepted; dangerous schemes like `file:` are rejected
+- **Persistent cookie secret**: when `COOKIE_SECRET` is not configured, the generated secret is persisted in the database so restarts no longer invalidate all sessions
+
+### Changed
+
+- **Dependencies upgraded across the board**: TypeScript 6.0, ESLint 10 (collector), better-sqlite3 12, recharts 3, react-day-picker 10, lucide-react 1.x, tailwind-merge 3, dotenv 17, Next.js 16.2.7, and more — all at latest; the web app stays on ESLint 9 until `eslint-plugin-react` supports v10
+
 ## [1.3.7] - 2026-04-12
 
 ### Fixed
