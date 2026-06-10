@@ -173,7 +173,7 @@ export function Header({
 
           {/* Backend Selector */}
           {listeningBackends.length > 0 && (
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
@@ -413,7 +413,7 @@ export function Header({
 
           {/* Mobile: More Options Dropdown */}
           <div className="sm:hidden">
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-9 w-9 relative">
                   {backendStatus === "unhealthy" && (
